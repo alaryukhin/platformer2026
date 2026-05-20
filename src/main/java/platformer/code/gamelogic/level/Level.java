@@ -197,9 +197,80 @@ public class Level {
 	//Your code goes here! 
 	//Please make sure you read the rubric/directions carefully and implement the solution recursively!
 	private void water(int col, int row, Map map, int fullness) {
-		
-	}
+		Tile[][] tiles = map.getTiles();
+		int width = tiles.length;
+		int height = tiles[0].length;
 
+		if (col < 0 || col >= width || row < 0 || row >= height)
+			return;
+
+		Tile current = tiles[col][row];
+		if (current != null && current.isSolid())
+			return;
+
+		if (current instanceof Water) {
+			Water existing = (Water) current;
+			if (existing.getFullness() >= fullness)
+				return;
+		}
+
+		String imageName;
+		switch (fullness) {
+		case 3:
+			imageName = "Full_water";
+			break;
+		case 2:
+			imageName = "Half_water";
+			break;
+		case 1:
+			imageName = "Quarter_water";
+			break;
+		default:
+			imageName = "Falling_water";
+		}
+
+		Water w = new Water(col, row, tileSize, tileset.getImage(imageName), this, fullness);
+		map.addTile(col, row, w);
+
+		boolean canFlowDown = false;
+		if (row + 1 < height) {
+			Tile below = tiles[col][row + 1];
+			if (below != null && !below.isSolid() && !(below instanceof Water)) {
+				canFlowDown = true;
+			}
+		}
+
+		if (canFlowDown) {
+			water(col, row + 1, map, 0);
+			return;
+		}
+
+		int nextFullness = fullness > 1 ? fullness - 1 : 1;
+
+		if (col - 1 >= 0) {
+			Tile left = tiles[col - 1][row];
+			boolean leftCanFill = left != null && !left.isSolid();
+			if (leftCanFill) {
+				if (left instanceof Water) {
+					leftCanFill = ((Water) left).getFullness() < nextFullness;
+				}
+				if (leftCanFill)
+					water(col - 1, row, map, nextFullness);
+			}
+		}
+
+		if (col + 1 < width) {
+			Tile right = tiles[col + 1][row];
+			boolean rightCanFill = right != null && !right.isSolid();
+			if (rightCanFill) {
+				if (right instanceof Water) {
+					rightCanFill = ((Water) right).getFullness() < nextFullness;
+				}
+				if (rightCanFill)
+					water(col + 1, row, map, nextFullness);
+			}
+		}
+	}
 
 
 	public void draw(Graphics g) {
