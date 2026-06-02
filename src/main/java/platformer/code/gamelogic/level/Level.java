@@ -118,6 +118,8 @@ public class Level {
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Half_water"), this, 2);
 				else if (values[x][y] == 21)
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Quarter_water"), this, 1);
+				else if (values[x][y] == 22)
+					tiles[x][y] = new SolidTile(xPosition, yPosition, tileSize, tileset.getImage("Anya"), this);
 			}
 
 		}
@@ -232,6 +234,7 @@ public class Level {
 		Water w = new Water(col, row, tileSize, tileset.getImage(imageName), this, fullness);
 		map.addTile(col, row, w);
 
+		// Check if we can flow down
 		boolean canFlowDown = false;
 		if (row + 1 < height) {
 			Tile below = tiles[col][row + 1];
@@ -241,8 +244,21 @@ public class Level {
 		}
 
 		if (canFlowDown) {
-			water(col, row + 1, map, 0);
+			// Flow down with same fullness
+			water(col, row + 1, map, fullness);
 			return;
+		}
+
+		// Check if we're at the bottom of the map
+		if (row == height - 1) {
+			// At bottom - don't flow left or right, just make full water block
+			return;
+		}
+
+		// We hit a solid or water below, so make this a full water block and flow left/right
+		if (fullness != 3) {
+			w.setIntensity(3);
+			w.setImage(tileset.getImage("Full_water"));
 		}
 
 		int nextFullness = fullness > 1 ? fullness - 1 : 1;
@@ -282,6 +298,35 @@ public class Level {
 				Tile tile = map.getTiles()[x][y];
 				if (tile == null)
 					continue;
+
+				if (tile instanceof Gas) {
+					Gas gas = (Gas) tile;
+					int neighbourGasCount = 0;
+					for (int i = -1; i <= 1; i++) {
+						for (int j = -1; j <= 1; j++) {
+							int nx = x + i;
+							int ny = y + j;
+							if (nx >= 0 && nx < map.getWidth() && ny >= 0 && ny < map.getHeight()) {
+								Tile n = map.getTiles()[nx][ny];
+								if (n instanceof Gas)
+									neighbourGasCount++;
+							}
+						}
+					}
+
+					// choose image/intensity based on how many gas tiles are nearby (including self)
+					if (neighbourGasCount >= 5) {
+						gas.setIntensity(3);
+						tile.setImage(tileset.getImage("GasThree"));
+					} else if (neighbourGasCount >= 2) {
+						gas.setIntensity(2);
+						tile.setImage(tileset.getImage("GasTwo"));
+					} else {
+						gas.setIntensity(1);
+						tile.setImage(tileset.getImage("GasOne"));
+					}
+				}
+
 				if (camera.isVisibleOnCamera(tile.getX(), tile.getY(), tile.getSize(), tile.getSize()))
 					tile.draw(g);
 			}
@@ -300,6 +345,66 @@ public class Level {
 			camera.draw(g);
 
 		g.translate((int) +camera.getX(), (int) +camera.getY());
+	}
+
+	//Adds gas tiles until the requisite number of squares are filled or there is no more room 
+	private void addGas(int col, int row, Map map, int numSquaresToFill, ArrayList<Gas> placedThisRound) {
+		Tile[][] tiles = map.getTiles();
+		int w = map.getWidth();
+		int h = map.getHeight();
+
+		if (numSquaresToFill <= 0)
+			return;
+
+		ArrayList<Gas> frontier = new ArrayList<>();
+
+		// try to place initial gas at origin
+		if (col >= 0 && col < w && row >= 0 && row < h) {
+			Tile cur = tiles[col][row];
+			boolean canPlace = (cur == null) || (!cur.isSolid() && !(cur instanceof Water) && !(cur instanceof Gas));
+			if (canPlace && numSquaresToFill > 0) {
+				Gas g = new Gas(col, row, tileSize, tileset.getImage("GasOne"), this, 0);
+				map.addTile(col, row, g);
+				tiles[col][row] = g;
+				placedThisRound.add(g);
+				frontier.add(g);
+				numSquaresToFill--;
+			}
+		}
+
+		// iteratively expand while we still need to place tiles
+		while (numSquaresToFill > 0 && !frontier.isEmpty()) {
+			ArrayList<Gas> next = new ArrayList<>();
+			for (Gas origin : frontier) {
+				int c = origin.getCol();
+				int r = origin.getRow();
+				int[][] dirs = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} }; // up, left, right, down
+				for (int[] d : dirs) {
+					int nc = c + d[0];
+					int nr = r + d[1];
+					if (nc < 0 || nc >= w || nr < 0 || nr >= h)
+						continue;
+					Tile t = tiles[nc][nr];
+					if (t != null && (t.isSolid() || t instanceof Water || t instanceof Gas))
+						continue;
+
+					// place gas here
+					Gas g = new Gas(nc, nr, tileSize, tileset.getImage("GasOne"), this, 0);
+					map.addTile(nc, nr, g);
+					tiles[nc][nr] = g;
+					placedThisRound.add(g);
+					next.add(g);
+					numSquaresToFill--;
+					if (numSquaresToFill <= 0)
+						break;
+				}
+				if (numSquaresToFill <= 0)
+					break;
+			}
+			if (next.isEmpty())
+				break; // no more room to expand
+			frontier = next;
+		}
 	}
 
 	// --------------------------Die-Listener
