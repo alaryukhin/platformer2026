@@ -118,8 +118,9 @@ public class Level {
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Half_water"), this, 2);
 				else if (values[x][y] == 21)
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Quarter_water"), this, 1);
-				else if (values[x][y] == 22)
+				else if (values[x][y] == 22){
 					tiles[x][y] = new SolidTile(xPosition, yPosition, tileSize, tileset.getImage("Anya"), this);
+				}
 			}
 
 		}
@@ -210,12 +211,6 @@ public class Level {
 		if (current != null && current.isSolid())
 			return;
 
-		if (current instanceof Water) {
-			Water existing = (Water) current;
-			if (existing.getFullness() >= fullness)
-				return;
-		}
-
 		String imageName;
 		switch (fullness) {
 		case 3:
@@ -238,27 +233,22 @@ public class Level {
 		boolean canFlowDown = false;
 		if (row + 1 < height) {
 			Tile below = tiles[col][row + 1];
-			if (below != null && !below.isSolid() && !(below instanceof Water)) {
-				canFlowDown = true;
+			if (below != null && !below.isSolid()) {
+				//if block below is empty and the block two below is solid, we can flow down but we should also make sure to fill the current block fully instead of flowing down with falling water
+				if(row+2 < height && tiles[col][row+2].isSolid()) {
+					water(col, row + 1, map, 3);
+				}
+				else{
+					water(col, row + 1, map, 0);
+				}
+				return;
 			}
-		}
-
-		if (canFlowDown) {
-			// Flow down with same fullness
-			water(col, row + 1, map, fullness);
-			return;
 		}
 
 		// Check if we're at the bottom of the map
 		if (row == height - 1) {
 			// At bottom - don't flow left or right, just make full water block
 			return;
-		}
-
-		// We hit a solid or water below, so make this a full water block and flow left/right
-		if (fullness != 3) {
-			w.setIntensity(3);
-			w.setImage(tileset.getImage("Full_water"));
 		}
 
 		int nextFullness = fullness > 1 ? fullness - 1 : 1;
@@ -349,65 +339,91 @@ public class Level {
 
 	//Adds gas tiles until the requisite number of squares are filled or there is no more room 
 	private void addGas(int col, int row, Map map, int numSquaresToFill, ArrayList<Gas> placedThisRound) {
-		Tile[][] tiles = map.getTiles();
-		int w = map.getWidth();
-		int h = map.getHeight();
+        int count = 0;
+        Gas start = new Gas(col, row, tileSize, tileset.getImage("GasOne"), this, 0);
+        map.addTile(col, row, start);
+        placedThisRound.add(start);
+        int i = 0;
+        while(i<placedThisRound.size()&& count<numSquaresToFill) {
+            Gas cur = placedThisRound.get(i);
+            int c = cur.getCol();
+            int r = cur.getRow();
+            //up 
+            if(count < numSquaresToFill && r-1>=0
+                && !map.getTiles()[c][r-1].isSolid()    
+                && !(map.getTiles()[c][r-1] instanceof Gas)) {
+                Gas newG = new Gas(c, r-1, tileSize, tileset.getImage("GasOne"), this, 0);
+                map.addTile(c, r-1, newG);
+                placedThisRound.add(newG);
+                count++;
+            }
+            //upright
+            if(count < numSquaresToFill && r-1>=0 && c + 1 < map.getTiles().length
+                    && !map.getTiles()[c+1][r-1].isSolid()  
+                    && !(map.getTiles()[c+1][r-1] instanceof Gas)) {
+                    Gas newG = new Gas(c+1, r-1, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c+1, r-1, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //upleft
+            if(count < numSquaresToFill && r-1>=0 && c - 1 >=0
+                    && !map.getTiles()[c-1][r-1].isSolid()  
+                    && !(map.getTiles()[c-1][r-1] instanceof Gas)) {
+                    Gas newG = new Gas(c-1, r-1, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c-1, r-1, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //right
+            if(count < numSquaresToFill && c+1 < map.getTiles().length
+                    && !map.getTiles()[c+1][r].isSolid()    
+                    && !(map.getTiles()[c+1][r] instanceof Gas)) {
+                    Gas newG = new Gas(c+1, r, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c+1, r, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //left
+            if(count < numSquaresToFill && c-1 >= 0
+                    && !map.getTiles()[c-1][r].isSolid()    
+                    && !(map.getTiles()[c-1][r] instanceof Gas)) {
+                    Gas newG = new Gas(c-1, r, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c-1, r, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //down
+            if(count < numSquaresToFill && r+1 < map.getTiles()[c].length
+                    && !map.getTiles()[c][r+1].isSolid()    
+                    && !(map.getTiles()[c][r+1] instanceof Gas)) {
+                    Gas newG = new Gas(c, r+1, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c, r+1, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //downright
+            if(count < numSquaresToFill && r+1 < map.getTiles()[c].length && c+1 < map.getTiles().length
+                    && !map.getTiles()[c+1][r+1].isSolid()  
+                    && !(map.getTiles()[c+1][r+1] instanceof Gas)) {
+                    Gas newG = new Gas(c+1, r+1, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c+1, r+1, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            //downleft
+            if(count < numSquaresToFill && r+1 < map.getTiles()[c].length && c -1 >= 0
+                    && !map.getTiles()[c-1][r+1].isSolid()  
+                    && !(map.getTiles()[c-1][r+1] instanceof Gas)) {
+                    Gas newG = new Gas(c-1, r+1, tileSize, tileset.getImage("GasOne"), this, 0);
+                    map.addTile(c-1, r+1, newG);
+                    placedThisRound.add(newG);
+                    count++;
+                }
+            i++;
+        }
+    }
 
-		if (numSquaresToFill <= 0)
-			return;
-
-		ArrayList<Gas> frontier = new ArrayList<>();
-
-		// try to place initial gas at origin
-		if (col >= 0 && col < w && row >= 0 && row < h) {
-			Tile cur = tiles[col][row];
-			boolean canPlace = (cur == null) || (!cur.isSolid() && !(cur instanceof Water) && !(cur instanceof Gas));
-			if (canPlace && numSquaresToFill > 0) {
-				Gas g = new Gas(col, row, tileSize, tileset.getImage("GasOne"), this, 0);
-				map.addTile(col, row, g);
-				tiles[col][row] = g;
-				placedThisRound.add(g);
-				frontier.add(g);
-				numSquaresToFill--;
-			}
-		}
-
-		// iteratively expand while we still need to place tiles
-		while (numSquaresToFill > 0 && !frontier.isEmpty()) {
-			ArrayList<Gas> next = new ArrayList<>();
-			for (Gas origin : frontier) {
-				int c = origin.getCol();
-				int r = origin.getRow();
-				int[][] dirs = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} }; // up, left, right, down
-				for (int[] d : dirs) {
-					int nc = c + d[0];
-					int nr = r + d[1];
-					if (nc < 0 || nc >= w || nr < 0 || nr >= h)
-						continue;
-					Tile t = tiles[nc][nr];
-					if (t != null && (t.isSolid() || t instanceof Water || t instanceof Gas))
-						continue;
-
-					// place gas here
-					Gas g = new Gas(nc, nr, tileSize, tileset.getImage("GasOne"), this, 0);
-					map.addTile(nc, nr, g);
-					tiles[nc][nr] = g;
-					placedThisRound.add(g);
-					next.add(g);
-					numSquaresToFill--;
-					if (numSquaresToFill <= 0)
-						break;
-				}
-				if (numSquaresToFill <= 0)
-					break;
-			}
-			if (next.isEmpty())
-				break; // no more room to expand
-			frontier = next;
-		}
-	}
-
-	// --------------------------Die-Listener
 	public void throwPlayerDieEvent() {
 		for (PlayerDieListener playerDieListener : dieListeners) {
 			playerDieListener.onPlayerDeath();
