@@ -10,7 +10,9 @@ import platformer.code.gameengine.loaders.Mapdata;
 import platformer.code.gameengine.loaders.Tileset;
 import platformer.code.gamelogic.GameResources;
 import platformer.code.gamelogic.Main;
+import platformer.code.gamelogic.enemies.AnyaEnemy;
 import platformer.code.gamelogic.enemies.Enemy;
+import platformer.code.gamelogic.enemies.Projectile;
 import platformer.code.gamelogic.player.Player;
 import platformer.code.gamelogic.tiledMap.Map;
 import platformer.code.gamelogic.tiles.Flag;
@@ -35,7 +37,9 @@ public class Level {
 	private boolean playerWin;
 
 	private ArrayList<Enemy> enemiesList = new ArrayList<>();
+	private ArrayList<AnyaEnemy> anyaEnemiesList = new ArrayList<>();
 	private ArrayList<Flower> flowers = new ArrayList<>();
+	private ArrayList<Projectile> projectiles = new ArrayList<>();
 
 	private List<PlayerDieListener> dieListeners = new ArrayList<>();
 	private List<PlayerWinListener> winListeners = new ArrayList<>();
@@ -95,6 +99,8 @@ public class Level {
 					tiles[x][y] = new SolidTile(xPosition, yPosition, tileSize, tileset.getImage("Grass"), this);
 				else if (values[x][y] == 8)
 					enemiesList.add(new Enemy(xPosition*tileSize, yPosition*tileSize, this)); // TODO: objects vs tiles
+				else if (values[x][y] == 22)
+					anyaEnemiesList.add(new AnyaEnemy(xPosition*tileSize, yPosition*tileSize, this)); // Anya shooting enemy
 				else if (values[x][y] == 9)
 					tiles[x][y] = new Flag(xPosition, yPosition, tileSize, tileset.getImage("Flag"), this);
 				else if (values[x][y] == 10) {
@@ -123,9 +129,7 @@ public class Level {
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Half_water"), this, 2);
 				else if (values[x][y] == 21)
 					tiles[x][y] = new Water(xPosition, yPosition, tileSize, tileset.getImage("Quarter_water"), this, 1);
-				else if (values[x][y] == 22){
-					tiles[x][y] = new SolidTile(xPosition, yPosition, tileSize, tileset.getImage("Anya"), this);
-				}
+
 				else if (values[x][y] == 23){
 					tiles[x][y] = new PowerUp(xPosition, yPosition, tileSize, tileset.getImage("Flower1"), this, 1);
 				}
@@ -260,6 +264,43 @@ public class Level {
 				enemies[i].update(tslf);
 				if (player.getHitbox().isIntersecting(enemies[i].getHitbox())) {
 					onPlayerDeath();
+				}
+			}
+			
+			// Update Anya enemies and handle their projectiles
+			for (int i = 0; i < anyaEnemiesList.size(); i++) {
+				AnyaEnemy anya = anyaEnemiesList.get(i);
+				anya.update(tslf);
+				
+				// Check if player collides with Anya
+				if (player.getHitbox().isIntersecting(anya.getHitbox())) {
+					onPlayerDeath();
+				}
+				
+				// Try to shoot a projectile
+				Projectile projectile = anya.tryShoot();
+				if (projectile != null) {
+					projectiles.add(projectile);
+				}
+			}
+			
+			// Update projectiles and check for collisions
+			for (int i = 0; i < projectiles.size(); i++) {
+				Projectile projectile = projectiles.get(i);
+				projectile.update(tslf);
+				
+				// Check if projectile hit the player
+				if (projectile.getHitbox().isIntersecting(player.getHitbox())) {
+					onPlayerDeath();
+					projectiles.remove(i);
+					i--;
+					continue;
+				}
+				
+				// Remove projectiles that go off screen
+				if (projectile.shouldRemove(map.getFullWidth(), map.getFullHeight())) {
+					projectiles.remove(i);
+					i--;
 				}
 			}
 
@@ -401,6 +442,16 @@ public class Level {
 		// Draw the enemies
 		for (int i = 0; i < enemies.length; i++) {
 			enemies[i].draw(g);
+		}
+		
+		// Draw Anya enemies
+		for (int i = 0; i < anyaEnemiesList.size(); i++) {
+			anyaEnemiesList.get(i).draw(g);
+		}
+		
+		// Draw projectiles
+		for (int i = 0; i < projectiles.size(); i++) {
+			projectiles.get(i).draw(g);
 		}
 
 		// Draw the player
