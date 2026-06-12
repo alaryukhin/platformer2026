@@ -15,6 +15,11 @@ public class Player extends PhysicsObject{
 	public float jumpPower = 1350;
 
 	private boolean isJumping = false;
+	private boolean isInWater = false;
+	private boolean isInGas = false;
+	private boolean hasDoubleJump = false;
+	private boolean doubleJumpUsed = false;
+	private long doubleJumpPowerUpTime = 0;
 
 	public Player(float x, float y, Level level) {
 	
@@ -25,8 +30,13 @@ public class Player extends PhysicsObject{
 
 	@Override
 	public void update(float tslf) {
-		super.update(tslf);
-		
+		// Check if double jump power-up has expired
+		if(hasDoubleJump && doubleJumpPowerUpTime != 0 && System.currentTimeMillis() - doubleJumpPowerUpTime > 10000) {
+			hasDoubleJump = false;
+			doubleJumpPowerUpTime = 0;
+			doubleJumpUsed = false;
+		}
+
 		movementVector.x = 0;
 		if(PlayerInput.isLeftKeyDown()) {
 			movementVector.x = -walkSpeed;
@@ -34,13 +44,31 @@ public class Player extends PhysicsObject{
 		if(PlayerInput.isRightKeyDown()) {
 			movementVector.x = +walkSpeed;
 		}
+
+		// Handle jumping with double jump capability
 		if(PlayerInput.isJumpKeyDown() && !isJumping) {
 			movementVector.y = -jumpPower;
 			isJumping = true;
+		} else if(PlayerInput.isJumpKeyDown() && hasDoubleJump && !doubleJumpUsed && isJumping) {
+			movementVector.y = -jumpPower;
+			doubleJumpUsed = true;
 		}
-		
+
+		// Apply buoyancy in water (reduced gravity)
+		if(isInWater) {
+			// Allow upward swim control in water (give player a gentle lift)
+			if(PlayerInput.isJumpKeyDown()) {
+				movementVector.y = -300;
+			}
+		}
+
+		super.update(tslf);
+
 		isJumping = true;
-		if(collisionMatrix[BOT] != null) isJumping = false;
+		if(collisionMatrix[BOT] != null) {
+			isJumping = false;
+			doubleJumpUsed = false;
+		}
 	}
 
 	@Override
@@ -59,5 +87,38 @@ public class Player extends PhysicsObject{
 		}
 		
 		hitbox.draw(g);
+	}
+	
+	// Getters and setters for water/gas/power-up mechanics
+	public void setInWater(boolean inWater) {
+		this.isInWater = inWater;
+	}
+	
+	public boolean isInWater() {
+		return isInWater;
+	}
+	
+	public void setInGas(boolean inGas) {
+		this.isInGas = inGas;
+	}
+	
+	public boolean isInGas() {
+		return isInGas;
+	}
+	
+	public void activateDoubleJump() {
+		this.hasDoubleJump = true;
+		this.doubleJumpUsed = false;
+		this.doubleJumpPowerUpTime = System.currentTimeMillis();
+	}
+	
+	public void deactivateDoubleJump() {
+		this.hasDoubleJump = false;
+		this.doubleJumpUsed = false;
+		this.doubleJumpPowerUpTime = 0;
+	}
+	
+	public boolean hasDoubleJumpPower() {
+		return hasDoubleJump;
 	}
 }

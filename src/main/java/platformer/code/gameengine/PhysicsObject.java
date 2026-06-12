@@ -32,7 +32,15 @@ public class PhysicsObject extends GameObject{
 
 	@Override
 	public void update(float tslf) {
-		movementVector.y += (Level.GRAVITY * Level.GRAVITY) * tslf;
+		// Apply gravity. Reduce gravity when the object is a Player and is in water
+		float gravityFactor = 1.0f;
+		if (this instanceof platformer.code.gamelogic.player.Player) {
+			platformer.code.gamelogic.player.Player p = (platformer.code.gamelogic.player.Player) this;
+			if (p.isInWater()) {
+				gravityFactor = 0.2f; // reduce gravity to simulate buoyancy
+			}
+		}
+		movementVector.y += (Level.GRAVITY * Level.GRAVITY) * tslf * gravityFactor;
 
 		updateCollisionMatrix(tslf); // checking collision based on the new position -> current movement Vector
 

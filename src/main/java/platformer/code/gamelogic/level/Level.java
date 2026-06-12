@@ -20,6 +20,7 @@ import platformer.code.gamelogic.tiles.SolidTile;
 import platformer.code.gamelogic.tiles.Spikes;
 import platformer.code.gamelogic.tiles.Tile;
 import platformer.code.gamelogic.tiles.Water;
+import platformer.code.gamelogic.tiles.PowerUp;
 
 public class Level {
 
@@ -45,6 +46,10 @@ public class Level {
 	private int tileSize;
 	private Tileset tileset;
 	public static float GRAVITY = 70;
+	
+	// Tracking variables for water and gas mechanics
+	private long gasExposureStartTime = 0;
+	private static final long GAS_DEATH_TIME = 5000; // 5 seconds
 
 	public Level(LevelData leveldata) {
 		this.leveldata = leveldata;
@@ -121,6 +126,9 @@ public class Level {
 				else if (values[x][y] == 22){
 					tiles[x][y] = new SolidTile(xPosition, yPosition, tileSize, tileset.getImage("Anya"), this);
 				}
+				else if (values[x][y] == 23){
+					tiles[x][y] = new PowerUp(xPosition, yPosition, tileSize, tileset.getImage("Flower1"), this, 1);
+				}
 			}
 
 		}
@@ -137,6 +145,7 @@ public class Level {
 		active = true;
 		playerDead = false;
 		playerWin = false;
+		gasExposureStartTime = 0;
 	}
 
 	public void onPlayerDeath() {
@@ -167,6 +176,54 @@ public class Level {
 				onPlayerDeath();
 			if (player.getCollisionMatrix()[PhysicsObject.RIG] instanceof Spikes)
 				onPlayerDeath();
+			
+			// ========== WATER AND GAS MECHANICS ==========
+			boolean inWater = false;
+			boolean inGas = false;
+			int tileSize = map.getTileSize();
+			int minX = Math.max(0, (int) (player.getHitbox().getX() / tileSize) - 1);
+			int maxX = Math.min(map.getWidth() - 1, (int) ((player.getHitbox().getX() + player.getHitbox().getWidth()) / tileSize) + 1);
+			int minY = Math.max(0, (int) (player.getHitbox().getY() / tileSize) - 1);
+			int maxY = Math.min(map.getHeight() - 1, (int) ((player.getHitbox().getY() + player.getHitbox().getHeight()) / tileSize) + 1);
+
+			for (int x = minX; x <= maxX; x++) {
+				for (int y = minY; y <= maxY; y++) {
+					Tile tile = map.getTiles()[x][y];
+					if (tile == null)
+						continue;
+					if (tile.getHitbox() == null)
+						continue;
+					if (tile.getHitbox().isIntersecting(player.getHitbox())) {
+						if (tile instanceof Water) {
+							inWater = true;
+						}
+						if (tile instanceof Gas) {
+							inGas = true;
+						}
+					}
+					if (inWater && inGas)
+						break;
+				}
+				if (inWater && inGas)
+					break;
+			}
+
+			player.setInWater(inWater);
+			
+			
+			
+			// Track gas exposure time
+			if(inGas) {
+				if(gasExposureStartTime == 0) {
+					gasExposureStartTime = System.currentTimeMillis();
+				}
+				if (System.currentTimeMillis() - gasExposureStartTime > GAS_DEATH_TIME) {
+					onPlayerDeath();
+				}
+			} else {
+				gasExposureStartTime = 0;
+			}
+			player.setInGas(inGas);
 
 			for (int i = 0; i < flowers.size(); i++) {
 				if (flowers.get(i).getHitbox().isIntersecting(player.getHitbox())) {
@@ -176,6 +233,25 @@ public class Level {
 						addGas(flowers.get(i).getCol(), flowers.get(i).getRow(), map, 20, new ArrayList<Gas>());
 					flowers.remove(i);
 					i--;
+				}
+			}
+			
+			// ========== POWER-UP MECHANIC ==========
+			// Check for power-up collisions
+			Tile[][] tiles = map.getTiles();
+			for(int x = 0; x < tiles.length; x++) {
+				for(int y = 0; y < tiles[0].length; y++) {
+					Tile tile = tiles[x][y];
+					if(tile instanceof PowerUp) {
+						if(tile.getHitbox().isIntersecting(player.getHitbox())) {
+							PowerUp powerUp = (PowerUp) tile;
+							if(powerUp.getPowerType() == 1) {
+								player.activateDoubleJump();
+							}
+							// Remove the power-up tile
+							map.addTile(x, y, new Tile(x, y, map.getTileSize(), null, false, this));
+						}
+					}
 				}
 			}
 
@@ -337,59 +413,49 @@ public class Level {
 		g.translate((int) +camera.getX(), (int) +camera.getY());
 	}
 
-	//Adds gas tiles until the requisite number of squares are filled or there is no more room
-	//Gas expands in priority order: UP first, then SIDEWAYS (left/right), then DOWN
+	// Adds gas tiles until the number of squares are filled or there is no more room
+	// Gas expands into all adjacent cells in a fixed order: up, up-left, up-right, left, right, down-left, down-right, down
 	private void addGas(int col, int row, Map map, int numSquaresToFill, ArrayList<Gas> placedThisRound) {
-        int count = 0;
+        int count = 1; // starting tile counts toward the fill target
         Gas start = new Gas(col, row, tileSize, tileset.getImage("GasOne"), this, 1);
         map.addTile(col, row, start);
         placedThisRound.add(start);
         int i = 0;
         
-        while(i < placedThisRound.size() && count < numSquaresToFill) {
+        int[][] offsets = {
+            {0, -1},  // up
+            {-1, -1}, // up-left
+            {1, -1},  // up-right
+            {-1, 0},  // left
+            {1, 0},   // right
+            {-1, 1},  // down-left
+            {1, 1},   // down-right
+            {0, 1}    // down
+        };
+        
+        while (i < placedThisRound.size() && count < numSquaresToFill) {
             Gas cur = placedThisRound.get(i);
             int c = cur.getCol();
             int r = cur.getRow();
             
-            // Priority 1: UPWARDS
-            if(count < numSquaresToFill && r-1 >= 0
-                && map.getTiles()[c][r-1] != null && !map.getTiles()[c][r-1].isSolid()    
-                && !(map.getTiles()[c][r-1] instanceof Gas)) {
-                Gas newG = new Gas(c, r-1, tileSize, tileset.getImage("GasOne"), this, 1);
-                map.addTile(c, r-1, newG);
+            for (int[] offset : offsets) {
+                if (count >= numSquaresToFill) {
+                    break;
+                }
+                int nextC = c + offset[0];
+                int nextR = r + offset[1];
+                if (nextC < 0 || nextR < 0 || nextC >= map.getTiles().length || nextR >= map.getTiles()[nextC].length) {
+                    continue;
+                }
+                Tile nextTile = map.getTiles()[nextC][nextR];
+                if (nextTile == null || nextTile.isSolid() || nextTile instanceof Gas || !nextTile.getClass().equals(Tile.class)) {
+                    continue;
+                }
+                Gas newG = new Gas(nextC, nextR, tileSize, tileset.getImage("GasOne"), this, 1);
+                map.addTile(nextC, nextR, newG);
                 placedThisRound.add(newG);
                 count++;
             }
-            
-            // Priority 2: SIDEWAYS (LEFT and RIGHT)
-            if(count < numSquaresToFill && c-1 >= 0
-                    && map.getTiles()[c-1][r] != null && !map.getTiles()[c-1][r].isSolid()    
-                    && !(map.getTiles()[c-1][r] instanceof Gas)) {
-                Gas newG = new Gas(c-1, r, tileSize, tileset.getImage("GasOne"), this, 1);
-                map.addTile(c-1, r, newG);
-                placedThisRound.add(newG);
-                count++;
-            }
-            
-            if(count < numSquaresToFill && c+1 < map.getTiles().length
-                    && map.getTiles()[c+1][r] != null && !map.getTiles()[c+1][r].isSolid()    
-                    && !(map.getTiles()[c+1][r] instanceof Gas)) {
-                Gas newG = new Gas(c+1, r, tileSize, tileset.getImage("GasOne"), this, 1);
-                map.addTile(c+1, r, newG);
-                placedThisRound.add(newG);
-                count++;
-            }
-            
-            // Priority 3: DOWNWARDS
-            if(count < numSquaresToFill && r+1 < map.getTiles()[c].length
-                    && map.getTiles()[c][r+1] != null && !map.getTiles()[c][r+1].isSolid()    
-                    && !(map.getTiles()[c][r+1] instanceof Gas)) {
-                Gas newG = new Gas(c, r+1, tileSize, tileset.getImage("GasOne"), this, 1);
-                map.addTile(c, r+1, newG);
-                placedThisRound.add(newG);
-                count++;
-            }
-            
             i++;
         }
     }
